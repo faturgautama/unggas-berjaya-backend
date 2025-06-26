@@ -1,0 +1,133 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model user {
+    id_user           Int                 @id @default(autoincrement())
+    username          String              @unique
+    password          String
+    full_name         String
+    email             String?
+    address           String?
+    phone             String?
+    whatsapp          String?
+    notes             String?
+    is_active         Boolean             @default(true)
+    create_at         DateTime            @default(now())
+    create_by         Int
+    update_at         DateTime?
+    update_by         Int?
+    last_login        DateTime?
+    last_logout       DateTime?
+    log_activity_user log_activity_user[]
+}
+
+model pelanggan {
+    id_pelanggan    Int       @id @default(autoincrement())
+    ref_id          String
+    full_name       String
+    identity_number String?
+    alamat          String?
+    phone           String
+    is_active       Boolean   @default(true)
+    is_blacklist    Boolean   @default(false)
+    create_at       DateTime  @default(now())
+    create_by       Int
+    update_at       DateTime?
+    update_by       Int?
+    is_delete       Boolean?  @default(false)
+    delete_at       DateTime?
+    delete_by       Int?
+    invoice         invoice[]
+    payment         payment[]
+}
+
+model invoice {
+    id_invoice     Int              @id @default(autoincrement())
+    invoice_number String
+    invoice_date   DateTime
+    pelanggan      pelanggan        @relation(fields: [id_pelanggan], references: [id_pelanggan])
+    id_pelanggan   Int
+    total          Float
+    bayar          Float
+    koreksi        Float?           @default(0)
+    kembali        Float?           @default(0)
+    is_cash        Boolean          @default(true)
+    invoice_status String           @default("PENDING")
+    create_at      DateTime         @default(now())
+    create_by      Int
+    update_at      DateTime?
+    update_by      Int?
+    is_deleted     Boolean          @default(false)
+    delete_at      DateTime?
+    delete_by      Int?
+    is_lunas       Boolean          @default(false)
+    lunas_at       DateTime?
+    payment        payment?         @relation(fields: [id_payment], references: [id_payment])
+    id_payment     Int?             @unique
+    invoice_detail invoice_detail[]
+}
+
+model invoice_detail {
+    id_invoice_detail Int       @id @default(autoincrement())
+    invoice           invoice   @relation(fields: [id_invoice], references: [id_invoice])
+    id_invoice        Int
+    kode_product      String
+    nama_product      String
+    price             Float
+    qty               Int
+    weight            Float
+    diskon_percentage Float?    @default(0)
+    diskon_rupiah     Float?    @default(0)
+    total             Float
+    create_at         DateTime  @default(now())
+    create_by         Int
+    update_at         DateTime?
+    update_by         Int?
+    is_deleted        Boolean   @default(false)
+    delete_at         DateTime?
+    delete_by         Int?
+}
+
+model payment {
+    id_payment     Int        @id @default(autoincrement())
+    invoice        invoice?   @relation
+    id_invoice     Int        @unique
+    pelanggan      pelanggan? @relation(fields: [id_pelanggan], references: [id_pelanggan])
+    id_pelanggan   Int?
+    payment_number String
+    payment_date   DateTime
+    payment_method String
+    payment_amount Float
+    notes          String?
+    create_at      DateTime   @default(now())
+    create_by      Int
+    update_at      DateTime?
+    update_by      Int?
+    is_delete      Boolean    @default(false)
+    delete_at      DateTime?
+    delete_by      Int?
+}
+
+model log_activity_user {
+    id_log_activity_user Int      @id @default(autoincrement())
+    user                 user     @relation(fields: [id_user], references: [id_user])
+    id_user              Int
+    endpoint             String
+    method               String
+    request_body         Json?
+    ip_address           String
+    browser              String
+    create_at            DateTime @default(now())
+}
