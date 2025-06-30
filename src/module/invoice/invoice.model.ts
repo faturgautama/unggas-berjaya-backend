@@ -13,9 +13,7 @@ export namespace InvoiceModel {
         kembali: number;
         is_cash: boolean;
         invoice_status: string;
-        id_payment: number;
-        payment_date: Date;
-        payment_method: string;
+        sudah_terbayar: number;
         create_at: Date;
         create_by: number;
         update_at: Date;

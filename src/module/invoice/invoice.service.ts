@@ -55,6 +55,15 @@ export class InvoiceService {
                             mode: 'insensitive'
                         }
                     });
+                } else if (key === 'full_name') {
+                    newQueries.AND.push({
+                        pelanggan: {
+                            [key]: {
+                                contains: value,
+                                mode: 'insensitive'
+                            }
+                        }
+                    });
                 }
             });
 
@@ -98,6 +107,9 @@ export class InvoiceService {
                                 id_payment: true,
                                 payment_date: true,
                                 payment_method: true,
+                                payment_amount: true,
+                                potongan: true,
+                                total: true
                             },
                             take: 1,
                         }
@@ -115,6 +127,12 @@ export class InvoiceService {
                 status: true,
                 message: '',
                 data: res.map((item) => {
+
+                    const totalBayar = item.payment.reduce((acc, curr) => {
+                        const potongan = curr.potongan || 0;
+                        return acc + (curr.total - potongan);
+                    }, 0);
+
                     return {
                         id_invoice: item.id_invoice,
                         invoice_number: item.invoice_number,
@@ -127,9 +145,7 @@ export class InvoiceService {
                         kembali: item.kembali,
                         is_cash: item.is_cash,
                         invoice_status: item.invoice_status,
-                        id_payment: item.payment.length ? item.payment[0].id_payment : null,
-                        payment_date: item.payment.length ? item.payment[0].payment_date : null,
-                        payment_method: item.payment.length ? item.payment[0].payment_method : null,
+                        sudah_terbayar: totalBayar,
                         create_at: item.create_at,
                         create_by: item.create_by,
                         update_at: item.update_at,
@@ -168,40 +184,53 @@ export class InvoiceService {
 
     async getById(id_invoice: number): Promise<any> {
         try {
-            let res: any = await this._prismaService
-                .invoice
-                .findUnique({
-                    where: { id_invoice: parseInt(id_invoice as any) },
-                    include: {
-                        pelanggan: {
-                            select: {
-                                id_pelanggan: true,
-                                full_name: true,
-                                alamat: true,
-                                phone: true,
-                            }
-                        },
-                        payment: {
-                            select: {
-                                id_payment: true,
-                                payment_date: true,
-                                payment_method: true,
-                                payment_amount: true
-                            }
-                        },
-                        invoice_detail: {
-                            where: {
-                                is_deleted: false
-                            },
+            const res = await this._prismaService.invoice.findUnique({
+                where: { id_invoice: parseInt(id_invoice as any) },
+                include: {
+                    pelanggan: {
+                        select: {
+                            id_pelanggan: true,
+                            full_name: true,
+                            alamat: true,
+                            phone: true,
                         }
                     },
-                });
+                    payment: {
+                        where: { is_delete: false },
+                        select: {
+                            id_payment: true,
+                            payment_date: true,
+                            payment_method: true,
+                            payment_amount: true,
+                            potongan: true,
+                            total: true
+                        }
+                    },
+                    invoice_detail: {
+                        where: { is_deleted: false },
+                    }
+                },
+            });
 
             if (!res) {
                 return {
                     status: false,
                     message: 'Faktur Penjualan Tidak Ditemukan',
-                }
+                };
+            }
+
+            // Hitung total bayar: payment_amount - potongan
+            let total_bayar = 0;
+            for (const pay of res.payment) {
+                const potongan = pay.potongan || 0;
+                total_bayar += pay.total - potongan;
+            }
+
+            // Hitung sum berat, sum qty
+            let total_berat = 0, total_qty = 0;
+            for (const item of res.invoice_detail) {
+                total_berat += parseFloat(item.weight as any);
+                total_qty += parseFloat(item.qty as any);
             }
 
             return {
@@ -215,15 +244,15 @@ export class InvoiceService {
                     full_name: res.pelanggan.full_name,
                     phone: res.pelanggan.phone,
                     alamat: res.pelanggan.alamat,
+                    total_berat: total_berat,
+                    total_qty: total_qty,
                     total: res.total,
-                    bayar: res.bayar,
+                    bayar: total_bayar, // gunakan hasil hitung manual
                     koreksi: res.koreksi,
                     kembali: res.kembali,
                     is_cash: res.is_cash,
                     invoice_status: res.invoice_status,
-                    id_payment: res.payment.length ? res.payment[0].id_payment : null,
-                    payment_date: res.payment.length ? res.payment[0].payment_date : null,
-                    payment_method: res.payment.length ? res.payment[0].payment_method : null,
+                    sudah_terbayar: total_bayar,
                     create_at: res.create_at,
                     create_by: res.create_by,
                     update_at: res.update_at,
@@ -235,7 +264,7 @@ export class InvoiceService {
                     lunas_at: res.lunas_at,
                     detail: res.invoice_detail
                 }
-            }
+            };
 
         } catch (error) {
             const status = error.message.includes('not found')

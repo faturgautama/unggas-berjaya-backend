@@ -63,6 +63,15 @@ export class PaymentService {
                             mode: 'insensitive'
                         }
                     });
+                } else if (key === 'full_name') {
+                    newQueries.AND.push({
+                        pelanggan: {
+                            [key]: {
+                                contains: value,
+                                mode: 'insensitive'
+                            }
+                        }
+                    });
                 }
             });
 
@@ -120,7 +129,30 @@ export class PaymentService {
             return {
                 status: true,
                 message: '',
-                data: res.map((item) => {
+                data: await Promise.all(res.map(async (item) => {
+                    let total_terbayar_sebelumnya = 0;
+
+                    if (item.id_invoice && item.payment_date) {
+                        const paymentsSebelumnya = await this._prismaService.payment.findMany({
+                            where: {
+                                id_invoice: item.id_invoice,
+                                is_delete: false,
+                                payment_date: {
+                                    lt: item.payment_date
+                                }
+                            },
+                            select: {
+                                total: true,
+                                potongan: true
+                            }
+                        });
+
+                        total_terbayar_sebelumnya = paymentsSebelumnya.reduce((acc, cur) => {
+                            const potongan = cur.potongan ?? 0;
+                            return acc + (cur.total - potongan);
+                        }, 0);
+                    }
+
                     return {
                         id_payment: item.id_payment,
                         id_invoice: item.id_invoice,
@@ -135,13 +167,14 @@ export class PaymentService {
                         payment_amount: item.payment_amount,
                         potongan: item.potongan,
                         total: item.total,
+                        total_terbayar_sebelumnya,
                         notes: item.notes,
                         create_at: item.create_at,
                         create_by: item.create_by,
                         update_at: item.update_at,
                         update_by: item.update_by,
                     }
-                }),
+                })),
                 meta: {
                     page: Number(page),
                     limit: Number(limit),
@@ -240,33 +273,20 @@ export class PaymentService {
             const userId = parseInt(req['user']['id_user'] as any);
             const { id_invoice, payment_date, ...rest } = payload;
 
-            // Ambil id_pelanggan dari invoice
             const invoice = await this._prismaService.invoice.findUnique({
                 where: { id_invoice },
-                select: { id_pelanggan: true, invoice_status: true }
+                select: { id_pelanggan: true, total: true }
             });
 
             if (!invoice) {
-                return {
-                    status: false,
-                    message: 'Invoice tidak ditemukan'
-                }
-            }
-
-            if (invoice && invoice.invoice_status != 'BELUM TERBAYAR') {
-                return {
-                    status: false,
-                    message: 'Invoice sudah terbayar'
-                }
+                return { status: false, message: 'Invoice tidak ditemukan' };
             }
 
             const id_pelanggan = invoice.id_pelanggan;
-
             const paymentDate = new Date(payment_date);
             const year = paymentDate.getFullYear();
             const month = paymentDate.getMonth();
 
-            // Hitung jumlah payment untuk pelanggan ini pada bulan dan tahun yang sama
             const countThisMonth = await this._prismaService.payment.count({
                 where: {
                     id_pelanggan,
@@ -292,38 +312,36 @@ export class PaymentService {
                 }
             });
 
-            if (!res) {
-                return {
-                    status: false,
-                    message: 'Payment gagal disimpan',
-                    data: res
-                };
+            // 🔄 Hitung ulang total bayar
+            const allPayments = await this._prismaService.payment.findMany({
+                where: { id_invoice, is_delete: false },
+                select: { total: true, potongan: true, payment_amount: true }
+            });
+
+            const totalPayments = allPayments.reduce((sum, p) => sum + (p.total - (p.potongan ?? 0)), 0);
+
+            const invoiceUpdateData: any = {
+                bayar: totalPayments,
+                update_at: new Date(),
+                update_by: userId,
+            };
+
+            if (totalPayments >= invoice.total) {
+                invoiceUpdateData.is_lunas = true;
+                invoiceUpdateData.lunas_at = new Date();
+                invoiceUpdateData.invoice_status = 'LUNAS';
+                invoiceUpdateData.source = 'system';
+            } else {
+                invoiceUpdateData.is_lunas = false;
+                invoiceUpdateData.lunas_at = null;
+                invoiceUpdateData.invoice_status = 'BELUM TERBAYAR';
+                invoiceUpdateData.source = 'system';
             }
 
-            const updateInvoice = await this._prismaService
-                .invoice
-                .update({
-                    where: {
-                        id_invoice: parseInt(res.id_invoice as any)
-                    },
-                    data: {
-                        bayar: parseFloat(res.total as any),
-                        invoice_status: 'LUNAS',
-                        lunas_at: new Date(),
-                        is_lunas: true,
-                        source: 'system',
-                        update_at: new Date(),
-                        update_by: userId
-                    }
-                });
-
-            if (!updateInvoice) {
-                return {
-                    status: false,
-                    message: 'Payment gagal disimpan',
-                    data: res
-                };
-            }
+            await this._prismaService.invoice.update({
+                where: { id_invoice },
+                data: invoiceUpdateData
+            });
 
             return {
                 status: true,
@@ -339,10 +357,7 @@ export class PaymentService {
                     : HttpStatus.INTERNAL_SERVER_ERROR;
 
             throw new HttpException(
-                {
-                    status: false,
-                    message: error.message
-                },
+                { status: false, message: error.message },
                 status
             );
         }
@@ -362,6 +377,42 @@ export class PaymentService {
                         update_by: parseInt(req['user']['id_user'] as any)
                     }
                 });
+
+            const payments = await this._prismaService.payment.findMany({
+                where: {
+                    id_invoice: parseInt(id_invoice as any),
+                    is_delete: false
+                },
+                select: {
+                    payment_amount: true,
+                    potongan: true,
+                    total: true,
+                }
+            });
+
+            const totalBayar = payments.reduce((acc, curr) => {
+                const potongan = curr.potongan || 0;
+                return acc + (curr.total - potongan);
+            }, 0);
+
+            await this._prismaService.invoice.update({
+                where: { id_invoice: parseInt(id_invoice as any) },
+                data: {
+                    bayar: totalBayar,
+                    is_lunas: totalBayar >= (await this._prismaService.invoice.findUnique({
+                        where: { id_invoice: parseInt(id_invoice as any) },
+                        select: { total: true }
+                    })).total,
+                    invoice_status: totalBayar >= (await this._prismaService.invoice.findUnique({
+                        where: { id_invoice: parseInt(id_invoice as any) },
+                        select: { total: true }
+                    })).total ? 'LUNAS' : 'BELUM TERBAYAR',
+                    lunas_at: totalBayar >= (await this._prismaService.invoice.findUnique({
+                        where: { id_invoice: parseInt(id_invoice as any) },
+                        select: { total: true }
+                    })).total ? new Date() : null
+                }
+            });
 
             return {
                 status: true,
@@ -388,13 +439,11 @@ export class PaymentService {
 
     async delete(req: Request, id_payment: string): Promise<any> {
         try {
+            const userId = parseInt(req['user']['id_user'] as any);
+
             const payment = await this._prismaService.payment.findFirst({
-                where: {
-                    id_payment: parseInt(id_payment as any)
-                },
-                select: {
-                    id_invoice: true
-                }
+                where: { id_payment: parseInt(id_payment) },
+                select: { id_invoice: true }
             });
 
             if (!payment) {
@@ -405,53 +454,57 @@ export class PaymentService {
                 };
             }
 
-            const updateInvoice = await this._prismaService
-                .invoice
-                .update({
-                    where: {
-                        id_invoice: parseInt(payment.id_invoice as any)
-                    },
-                    data: {
-                        invoice_status: 'BELUM TERBAYAR',
-                        lunas_at: null,
-                        is_lunas: false,
-                        source: 'legacy',
-                        update_at: null
-                    }
-                });
-
-            if (!updateInvoice) {
-                return {
-                    status: false,
-                    message: 'Payment gagal dihapus',
-                    data: id_payment
-                };
-            }
-
-            let res = await this._prismaService
-                .payment
-                .update({
-                    where: { id_payment: parseInt(id_payment as any) },
-                    data: {
-                        is_delete: true,
-                        delete_at: new Date(),
-                        delete_by: parseInt(req['user']['id_user'] as any)
-                    }
-                });
-
-            if (!res) {
-                return {
-                    status: false,
-                    message: 'Delete payment failed',
-                    data: null
+            // Soft delete payment
+            await this._prismaService.payment.update({
+                where: { id_payment: parseInt(id_payment) },
+                data: {
+                    is_delete: true,
+                    delete_at: new Date(),
+                    delete_by: userId
                 }
+            });
+
+            // 🔄 Hitung ulang total bayar
+            const allPayments = await this._prismaService.payment.findMany({
+                where: { id_invoice: payment.id_invoice, is_delete: false },
+                select: { total: true, potongan: true, payment_amount: true }
+            });
+
+            const totalPayments = allPayments.reduce((sum, p) => sum + (p.total - (p.potongan ?? 0)), 0);
+
+            const invoice = await this._prismaService.invoice.findUnique({
+                where: { id_invoice: payment.id_invoice },
+                select: { total: true }
+            });
+
+            const invoiceUpdateData: any = {
+                bayar: totalPayments,
+                update_at: new Date(),
+                update_by: userId,
+            };
+
+            if (totalPayments >= invoice.total) {
+                invoiceUpdateData.is_lunas = true;
+                invoiceUpdateData.lunas_at = new Date();
+                invoiceUpdateData.invoice_status = 'LUNAS';
+                invoiceUpdateData.source = 'system';
+            } else {
+                invoiceUpdateData.is_lunas = false;
+                invoiceUpdateData.lunas_at = null;
+                invoiceUpdateData.invoice_status = 'BELUM TERBAYAR';
+                invoiceUpdateData.source = 'system';
             }
+
+            await this._prismaService.invoice.update({
+                where: { id_invoice: payment.id_invoice },
+                data: invoiceUpdateData
+            });
 
             return {
                 status: true,
                 message: 'Delete payment success',
-                data: res.id_payment
-            }
+                data: parseInt(id_payment)
+            };
 
         } catch (error) {
             const status = error.message.includes('not found')
@@ -461,10 +514,7 @@ export class PaymentService {
                     : HttpStatus.INTERNAL_SERVER_ERROR;
 
             throw new HttpException(
-                {
-                    status: false,
-                    message: error.message
-                },
+                { status: false, message: error.message },
                 status
             );
         }
