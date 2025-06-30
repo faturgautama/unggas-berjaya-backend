@@ -72,6 +72,14 @@ export namespace PaymentModel {
         @IsNotEmpty()
         payment_amount: number;
 
+        @IsNumber()
+        @IsOptional()
+        potongan: number;
+
+        @IsNumber()
+        @IsNotEmpty()
+        total: number;
+
         @IsOptional()
         @IsString()
         notes?: string;
@@ -101,6 +109,14 @@ export namespace PaymentModel {
         @IsNumber()
         @IsNotEmpty()
         payment_amount: number;
+
+        @IsNumber()
+        @IsOptional()
+        potongan: number;
+
+        @IsNumber()
+        @IsNotEmpty()
+        total: number;
 
         @IsOptional()
         @IsString()

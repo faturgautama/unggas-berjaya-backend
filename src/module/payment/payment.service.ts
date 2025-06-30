@@ -34,8 +34,8 @@ export class PaymentService {
             Object.entries(queries).forEach(([key, value]) => {
                 if (value === undefined || value === null || value === '') return;
 
-                if (key === 'is_deleted') {
-                    newQueries.AND.push({ is_deleted: false });
+                if (key === 'is_delete') {
+                    newQueries.AND.push({ is_delete: false });
                 } else if (key === 'invoice_date') {
                     const date = new Date(value as any);
                     const start = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -86,7 +86,7 @@ export class PaymentService {
                 }
 
                 newQueries.OR = globalSearchOR;
-            }
+            };
 
             const [res, total] = await this._prismaService.$transaction([
                 this._prismaService.payment.findMany({
@@ -96,6 +96,7 @@ export class PaymentService {
                             select: {
                                 id_pelanggan: true,
                                 full_name: true,
+                                alamat: true,
                             }
                         },
                         invoice: {
@@ -123,14 +124,17 @@ export class PaymentService {
                     return {
                         id_payment: item.id_payment,
                         id_invoice: item.id_invoice,
-                        invoice_number: item.invoice.invoice_number,
-                        invoice_date: item.invoice.invoice_date,
+                        invoice_number: item.invoice ? item.invoice.invoice_number : null,
+                        invoice_date: item.invoice ? item.invoice.invoice_date : null,
                         id_pelanggan: item.id_pelanggan,
                         full_name: item.pelanggan.full_name,
+                        alamat: item.pelanggan.alamat,
                         payment_date: item.payment_date,
                         payment_method: item.payment_method,
                         payment_number: item.payment_number,
                         payment_amount: item.payment_amount,
+                        potongan: item.potongan,
+                        total: item.total,
                         notes: item.notes,
                         create_at: item.create_at,
                         create_by: item.create_by,
@@ -203,6 +207,8 @@ export class PaymentService {
                         payment_method: item.payment_method,
                         payment_number: item.payment_number,
                         payment_amount: item.payment_amount,
+                        potongan: item.potongan,
+                        total: item.total,
                         notes: item.notes,
                         create_at: item.create_at,
                         create_by: item.create_by,
@@ -286,6 +292,39 @@ export class PaymentService {
                 }
             });
 
+            if (!res) {
+                return {
+                    status: false,
+                    message: 'Payment gagal disimpan',
+                    data: res
+                };
+            }
+
+            const updateInvoice = await this._prismaService
+                .invoice
+                .update({
+                    where: {
+                        id_invoice: parseInt(res.id_invoice as any)
+                    },
+                    data: {
+                        bayar: parseFloat(res.total as any),
+                        invoice_status: 'LUNAS',
+                        lunas_at: new Date(),
+                        is_lunas: true,
+                        source: 'system',
+                        update_at: new Date(),
+                        update_by: userId
+                    }
+                });
+
+            if (!updateInvoice) {
+                return {
+                    status: false,
+                    message: 'Payment gagal disimpan',
+                    data: res
+                };
+            }
+
             return {
                 status: true,
                 message: 'Payment berhasil disimpan',
@@ -309,11 +348,9 @@ export class PaymentService {
         }
     }
 
-
-
     async update(req: Request, payload: PaymentModel.UpdatePayment): Promise<any> {
         try {
-            const { id_payment, ...data } = payload;
+            const { id_payment, id_invoice, payment_number, ...data } = payload;
 
             let res = await this._prismaService
                 .payment
@@ -324,7 +361,7 @@ export class PaymentService {
                         update_at: new Date(),
                         update_by: parseInt(req['user']['id_user'] as any)
                     }
-                })
+                });
 
             return {
                 status: true,
@@ -351,6 +388,46 @@ export class PaymentService {
 
     async delete(req: Request, id_payment: string): Promise<any> {
         try {
+            const payment = await this._prismaService.payment.findFirst({
+                where: {
+                    id_payment: parseInt(id_payment as any)
+                },
+                select: {
+                    id_invoice: true
+                }
+            });
+
+            if (!payment) {
+                return {
+                    status: false,
+                    message: 'Payment tidak ditemukan',
+                    data: id_payment
+                };
+            }
+
+            const updateInvoice = await this._prismaService
+                .invoice
+                .update({
+                    where: {
+                        id_invoice: parseInt(payment.id_invoice as any)
+                    },
+                    data: {
+                        invoice_status: 'BELUM TERBAYAR',
+                        lunas_at: null,
+                        is_lunas: false,
+                        source: 'legacy',
+                        update_at: null
+                    }
+                });
+
+            if (!updateInvoice) {
+                return {
+                    status: false,
+                    message: 'Payment gagal dihapus',
+                    data: id_payment
+                };
+            }
+
             let res = await this._prismaService
                 .payment
                 .update({
@@ -365,15 +442,15 @@ export class PaymentService {
             if (!res) {
                 return {
                     status: false,
-                    message: 'Delete pelanggan failed',
+                    message: 'Delete payment failed',
                     data: null
                 }
             }
 
             return {
                 status: true,
-                message: 'Delete pelanggan success',
-                data: res.id_pelanggan
+                message: 'Delete payment success',
+                data: res.id_payment
             }
 
         } catch (error) {

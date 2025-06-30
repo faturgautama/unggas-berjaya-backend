@@ -30,6 +30,26 @@ export class LaporanController {
         }
     }
 
+    @Get('umur-piutang-customer')
+    @UseGuards(JwtGuard)
+    @ApiBearerAuth('token')
+    @ApiResponse({ status: 200, type: LaporanModel.GetLaporanUmurPiutangCustomer })
+    async getLaporanUmurPiutangCustomer(
+        @Query() query: LaporanModel.QueryBulanTahun,
+        @Res() res: Response
+    ) {
+        try {
+            const data = await this.laporanService.getLaporanUmurPiutangCustomer(query);
+            return res.status(HttpStatus.OK).json(data);
+        } catch (error) {
+            return res.status(error.status || 500).json({
+                status: false,
+                message: error.message,
+                data: null,
+            });
+        }
+    }
+
     @Get('pembayaran-masuk')
     @UseGuards(JwtGuard)
     @ApiBearerAuth('token')
@@ -39,7 +59,7 @@ export class LaporanController {
     ) {
         try {
             const data = await this.laporanService.getLaporanPembayaranMasuk(query);
-            return res.status(HttpStatus.OK).json({ status: true, message: '', data });
+            return res.status(HttpStatus.OK).json(data);
         } catch (error) {
             return res.status(error.status || 500).json({
                 status: false,
@@ -58,7 +78,7 @@ export class LaporanController {
     ) {
         try {
             const data = await this.laporanService.getRekapitulasiPenjualan(query);
-            return res.status(HttpStatus.OK).json({ status: true, message: '', data });
+            return res.status(HttpStatus.OK).json(data);
         } catch (error) {
             return res.status(error.status || 500).json({
                 status: false,
@@ -74,7 +94,7 @@ export class LaporanController {
     async getCustomerPiutangTerbanyak(@Res() res: Response) {
         try {
             const data = await this.laporanService.getCustomerPiutangTerbanyak();
-            return res.status(HttpStatus.OK).json({ status: true, message: '', data });
+            return res.status(HttpStatus.OK).json(data);
         } catch (error) {
             return res.status(error.status || 500).json({
                 status: false,
@@ -93,7 +113,7 @@ export class LaporanController {
     ) {
         try {
             const data = await this.laporanService.getRiwayatPembayaran(Number(id_pelanggan));
-            return res.status(HttpStatus.OK).json({ status: true, message: '', data });
+            return res.status(HttpStatus.OK).json(data);
         } catch (error) {
             return res.status(error.status || 500).json({
                 status: false,

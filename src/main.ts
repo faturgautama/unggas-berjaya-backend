@@ -19,8 +19,8 @@ async function bootstrap() {
     app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
     const config = new DocumentBuilder()
-        .setTitle('LINKBIT BILLING SYSTEM')
-        .setDescription('Linkbit Billing System Webservice v0.0.1')
+        .setTitle('Unggas Berjaya Backoffice System')
+        .setDescription('Unggas Berjaya Webservice v0.0.1')
         .setVersion('1.0')
         .addTag('api')
         .addBearerAuth(

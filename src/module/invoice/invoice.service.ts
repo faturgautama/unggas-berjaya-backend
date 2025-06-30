@@ -91,11 +91,15 @@ export class InvoiceService {
                             }
                         },
                         payment: {
+                            where: {
+                                is_delete: false,
+                            },
                             select: {
                                 id_payment: true,
                                 payment_date: true,
                                 payment_method: true,
                             },
+                            take: 1,
                         }
                     },
                     orderBy: {
@@ -123,9 +127,9 @@ export class InvoiceService {
                         kembali: item.kembali,
                         is_cash: item.is_cash,
                         invoice_status: item.invoice_status,
-                        id_payment: item.id_payment,
-                        payment_date: item.payment ? item.payment.payment_date : null,
-                        payment_method: item.payment ? item.payment.payment_method : null,
+                        id_payment: item.payment.length ? item.payment[0].id_payment : null,
+                        payment_date: item.payment.length ? item.payment[0].payment_date : null,
+                        payment_method: item.payment.length ? item.payment[0].payment_method : null,
                         create_at: item.create_at,
                         create_by: item.create_by,
                         update_at: item.update_at,
@@ -146,8 +150,6 @@ export class InvoiceService {
             }
 
         } catch (error) {
-            console.log("error =>", error);
-
             const status = error.message.includes('not found')
                 ? HttpStatus.NOT_FOUND
                 : error.message.includes('bad request')
@@ -176,18 +178,31 @@ export class InvoiceService {
                                 id_pelanggan: true,
                                 full_name: true,
                                 alamat: true,
+                                phone: true,
                             }
                         },
                         payment: {
                             select: {
                                 id_payment: true,
-                                create_at: true,
+                                payment_date: true,
                                 payment_method: true,
                                 payment_amount: true
                             }
+                        },
+                        invoice_detail: {
+                            where: {
+                                is_deleted: false
+                            },
                         }
                     },
                 });
+
+            if (!res) {
+                return {
+                    status: false,
+                    message: 'Faktur Penjualan Tidak Ditemukan',
+                }
+            }
 
             return {
                 status: true,
@@ -198,25 +213,17 @@ export class InvoiceService {
                     invoice_date: res.invoice_date,
                     id_pelanggan: res.id_pelanggan,
                     full_name: res.pelanggan.full_name,
+                    phone: res.pelanggan.phone,
                     alamat: res.pelanggan.alamat,
-                    pelanggan_code: res.pelanggan.pelanggan_code,
-                    whatsapp: res.pelanggan.whatsapp,
-                    id_pelanggan_product: res.id_pelanggan_product,
-                    id_product: res.id_product,
-                    product_name: res.product.product_name,
-                    price: res.price,
-                    diskon_percentage: res.diskon_percentage,
-                    diskon_rupiah: res.diskon_rupiah,
-                    pajak: res.pajak,
-                    admin_fee: res.admin_fee,
-                    unique_code: res.unique_code,
                     total: res.total,
-                    due_date: res.due_date,
-                    notes: res.notes,
+                    bayar: res.bayar,
+                    koreksi: res.koreksi,
+                    kembali: res.kembali,
+                    is_cash: res.is_cash,
                     invoice_status: res.invoice_status,
-                    id_payment: res.id_payment,
-                    payment_date: res.payment ? res.payment.payment_date : null,
-                    payment_method: res.payment ? res.payment.payment_method : null,
+                    id_payment: res.payment.length ? res.payment[0].id_payment : null,
+                    payment_date: res.payment.length ? res.payment[0].payment_date : null,
+                    payment_method: res.payment.length ? res.payment[0].payment_method : null,
                     create_at: res.create_at,
                     create_by: res.create_by,
                     update_at: res.update_at,
@@ -224,6 +231,9 @@ export class InvoiceService {
                     is_deleted: res.is_deleted,
                     delete_at: res.delete_at,
                     delete_by: res.delete_by,
+                    is_lunas: res.is_lunas,
+                    lunas_at: res.lunas_at,
+                    detail: res.invoice_detail
                 }
             }
 
@@ -271,6 +281,8 @@ export class InvoiceService {
                         create_by: invoice.create_by,
                         create_at: new Date(),
                         invoice_status: invoice.is_lunas ? 'LUNAS' : 'BELUM TERBAYAR',
+                        source: 'legacy',
+                        source_sync_at: new Date(),
                     },
                 });
 
@@ -303,6 +315,8 @@ export class InvoiceService {
                 });
 
                 if (!existing) continue;
+
+                if (existing.source && existing.source !== 'legacy') continue;
 
                 const isMainDiff =
                     new Date(invoice.invoice_date).toISOString() !== existing.invoice_date.toISOString() ||
@@ -359,6 +373,8 @@ export class InvoiceService {
                         update_by: invoice.create_by,
                         update_at: new Date(),
                         invoice_status: invoice.is_lunas ? 'LUNAS' : 'BELUM TERBAYAR',
+                        source: 'legacy',
+                        source_sync_at: new Date(),
                     },
                 });
 

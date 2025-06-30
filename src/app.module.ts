@@ -23,6 +23,8 @@ import { PaymentService } from './module/payment/payment.service';
 import { PaymentController } from './module/payment/payment.controller';
 import { LaporanController } from './module/laporan/laporan.controller';
 import { LaporanService } from './module/laporan/laporan.service';
+import { DashboardController } from './module/dashboard/dashboard.controller';
+import { DashboardService } from './module/dashboard/dashboard.service';
 
 @Module({
     imports: [
@@ -39,6 +41,7 @@ import { LaporanService } from './module/laporan/laporan.service';
         InvoiceController,
         PaymentController,
         LaporanController,
+        DashboardController,
     ],
     providers: [
         JwtStrategy,
@@ -51,6 +54,7 @@ import { LaporanService } from './module/laporan/laporan.service';
         InvoiceService,
         PaymentService,
         LaporanService,
+        DashboardService
     ],
 })
 export class AppModule {
