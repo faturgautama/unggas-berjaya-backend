@@ -318,7 +318,7 @@ export class PaymentService {
                 select: { total: true, potongan: true, payment_amount: true }
             });
 
-            const totalPayments = allPayments.reduce((sum, p) => sum + (p.total - (p.potongan ?? 0)), 0);
+            const totalPayments = allPayments.reduce((sum, p) => sum + (p.total + (p.potongan ?? 0)), 0);
 
             const invoiceUpdateData: any = {
                 bayar: totalPayments,

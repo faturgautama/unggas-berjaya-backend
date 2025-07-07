@@ -130,7 +130,7 @@ export class InvoiceService {
 
                     const totalBayar = item.payment.reduce((acc, curr) => {
                         const potongan = curr.potongan || 0;
-                        return acc + (curr.total - potongan);
+                        return acc + (curr.total + potongan);
                     }, 0);
 
                     return {
@@ -144,7 +144,7 @@ export class InvoiceService {
                         koreksi: item.koreksi,
                         kembali: item.kembali,
                         is_cash: item.is_cash,
-                        invoice_status: item.invoice_status,
+                        invoice_status: parseFloat(totalBayar < 1 ? (item.bayar as any) : (totalBayar as any)) == parseFloat(item.total as any) ? 'LUNAS' : 'BELUM LUNAS',
                         sudah_terbayar: totalBayar,
                         create_at: item.create_at,
                         create_by: item.create_by,
@@ -223,7 +223,7 @@ export class InvoiceService {
             let total_bayar = 0;
             for (const pay of res.payment) {
                 const potongan = pay.potongan || 0;
-                total_bayar += pay.total - potongan;
+                total_bayar += pay.total + potongan;
             }
 
             // Hitung sum berat, sum qty
@@ -247,11 +247,11 @@ export class InvoiceService {
                     total_berat: total_berat,
                     total_qty: total_qty,
                     total: res.total,
-                    bayar: total_bayar, // gunakan hasil hitung manual
+                    bayar: res.bayar,
                     koreksi: res.koreksi,
                     kembali: res.kembali,
                     is_cash: res.is_cash,
-                    invoice_status: res.invoice_status,
+                    invoice_status: parseFloat(total_bayar < 1 ? (res.bayar as any) : (total_bayar as any)) == parseFloat(res.total as any) ? 'LUNAS' : 'BELUM LUNAS',
                     sudah_terbayar: total_bayar,
                     create_at: res.create_at,
                     create_by: res.create_by,
