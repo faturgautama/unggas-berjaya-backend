@@ -21,6 +21,7 @@ export class LaporanService {
                 const start = new Date(tahun, bulan - 1, 1);
                 const end = new Date(tahun, bulan, 1);
                 whereInvoice.invoice_date = {
+                    gte: new Date('2025-07-01T00:00:00'),
                     lte: end
                 };
             }
@@ -28,8 +29,6 @@ export class LaporanService {
             if (id_pelanggan) {
                 whereInvoice.id_pelanggan = parseInt(id_pelanggan as any);
             };
-
-            console.log("where =>", whereInvoice)
 
             const invoices = await this.prisma.invoice.findMany({
                 where: whereInvoice,
@@ -116,7 +115,7 @@ export class LaporanService {
             if (query.bulan !== undefined && query.tahun !== undefined) {
                 const start = new Date(query.tahun, query.bulan - 1, 1);
                 const end = new Date(query.tahun, query.bulan, 1);
-                whereInvoice.invoice_date = { lte: end };
+                whereInvoice.invoice_date = { gte: new Date('2025-07-01T00:00:00'), lte: end };
             }
 
             const invoices = await this.prisma.invoice.findMany({
@@ -172,8 +171,6 @@ export class LaporanService {
                 data: results,
             };
         } catch (error) {
-            console.log("error =>", error);
-
             const status = error.message.includes('not found')
                 ? HttpStatus.NOT_FOUND
                 : error.message.includes('bad request')
